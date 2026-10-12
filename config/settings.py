@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,13 +20,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-swafj6#me2e=b!!@kwvs^3h5*8jv6^&)sa5gk_s@%+r6j*-d^!'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY", "django-insecure-dev-only-change-me-in-production"
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
 # Application definition
@@ -37,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'fuelroute',
 ]
 
 MIDDLEWARE = [
@@ -115,6 +118,48 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Cache (route results are cached so repeat requests and the map page skip OSRM)
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "fuelroute",
+        "TIMEOUT": 60 * 60 * 24,
+    }
+}
+
+
+# Django REST Framework
+
+REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "UNAUTHENTICATED_USER": None,
+}
+
+
+# Fuel route settings
+
+FUEL_ROUTE = {
+    "DATA_DIR": BASE_DIR / "data",
+    "STATIONS_CSV": BASE_DIR / "data" / "fuel-prices-for-be-assessment.csv",
+    "CITIES_CSV": BASE_DIR / "data" / "us_cities.csv",
+    "MAX_RANGE_MILES": 500,
+    "MILES_PER_GALLON": 10,
+    "CORRIDOR_MILES": 10,
+    "OSRM_URL": os.environ.get("OSRM_URL", "https://router.project-osrm.org"),
+    "NOMINATIM_URL": os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org"),
+    "HTTP_TIMEOUT_SECONDS": 20,
+    "USER_AGENT": "spotter-fuel-route-assessment/1.0",
+}
 
 
 # Email
