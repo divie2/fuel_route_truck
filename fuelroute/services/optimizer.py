@@ -1,20 +1,21 @@
 """Choose where to buy fuel and how much, minimizing total cost.
 
-Classic greedy for a fixed route (optimal for this problem):
-  At each station:
-    1. If a cheaper station is within range, buy just enough to reach the nearest one.
-    2. Else if the finish is within range, buy just enough to finish.
-    3. Else fill the tank and drive to the cheapest station within range.
+Dynamic programming over (station, fuel in tank):
+  - Distances are whole miles and fuel is measured in miles of range (0..max_range).
+  - At each station you may buy any amount; buying costs gallons * price plus a
+    fixed `stop_penalty`. The penalty avoids impractical plans with many tiny
+    top-ups that save a few cents. It is not included in the reported cost.
+  - Then you drive to the next station (or the finish) and the tank drops by the distance.
 
 The truck starts at the first station (mile 0) with an empty tank.
-Pure Python, no Django, so it's easy to unit test.
+Pure Python + numpy, no Django, so it's easy to unit test.
 """
 
 from dataclasses import dataclass, field
 
-from .exceptions import NoFeasiblePlanError
+import numpy as np
 
-_EPSILON = 1e-9
+from .exceptions import NoFeasiblePlanError
 
 
 @dataclass(frozen=True)
@@ -49,52 +50,71 @@ def plan_fuel_stops(
     total_miles: float,
     max_range_miles: float,
     miles_per_gallon: float,
+    stop_penalty: float = 0.0,
 ) -> FuelPlan:
-    route = sorted((s for s in stations if s.route_mile <= total_miles), key=lambda s: s.route_mile)
-    if not route or route[0].route_mile > _EPSILON:
+    finish = round(total_miles)
+    capacity = int(max_range_miles)
+    route = _cheapest_per_mile(stations, finish)
+    if not route or route[0][0] != 0:
         raise NoFeasiblePlanError("No fuel station at the start of the route.")
 
-    plan = FuelPlan()
-    fuel = 0.0  # in miles of range
-    i = 0
+    positions = [mile for mile, _ in route]
+    hops = np.diff(positions + [finish])
+    if hops.max(initial=0) > capacity:
+        gap_at = positions[int(np.argmax(hops))]
+        raise NoFeasiblePlanError(
+            f"No fuel station within {capacity} miles after mile {gap_at} of the route."
+        )
 
-    def buy(station: StationOnRoute, miles: float) -> None:
-        if miles <= _EPSILON:
-            return
-        gallons = miles / miles_per_gallon
-        plan.purchases.append(Purchase(station, gallons, gallons * station.price))
+    levels = np.arange(capacity + 1)
+    inf = np.inf
+    arrive = np.full(capacity + 1, inf)
+    arrive[0] = 0.0  # empty tank at the first station
+    bought_from = []  # per station: fuel level before buying, or -1 if nothing bought
 
-    while True:
-        here = route[i]
-        cheaper = None
-        cheapest_in_range = None
+    for (_, station), hop in zip(route, hops):
+        per_mile = station.price / miles_per_gallon
+        # leave[g] = min(arrive[g], penalty + per_mile*g + min_{f<g}(arrive[f] - per_mile*f))
+        shifted = arrive - per_mile * levels
+        prefix_min = np.minimum.accumulate(shifted)
+        prefix_arg = np.maximum.accumulate(np.where(shifted <= prefix_min, levels, 0))
+        best_before = np.concatenate(([inf], prefix_min[:-1]))
+        arg_before = np.concatenate(([-1], prefix_arg[:-1]))
 
-        k = i + 1
-        while k < len(route) and route[k].route_mile - here.route_mile <= max_range_miles:
-            if route[k].price < here.price:
-                cheaper = k
-                break
-            # "<=" so ties prefer the farther station (fewer stops).
-            if cheapest_in_range is None or route[k].price <= route[cheapest_in_range].price:
-                cheapest_in_range = k
-            k += 1
+        buy_cost = stop_penalty + per_mile * levels + best_before
+        buy = buy_cost < arrive
+        leave = np.where(buy, buy_cost, arrive)
+        bought_from.append(np.where(buy, arg_before, -1))
 
-        to_finish = total_miles - here.route_mile
+        arrive = np.concatenate((leave[hop:], np.full(hop, inf)))
 
-        if cheaper is not None:
-            need = route[cheaper].route_mile - here.route_mile
-            buy(here, need - fuel)
-            fuel = max(fuel, need) - need
-            i = cheaper
-        elif to_finish <= max_range_miles:
-            buy(here, to_finish - fuel)
-            return plan
-        elif cheapest_in_range is None:
-            raise NoFeasiblePlanError(
-                f"No fuel station within {max_range_miles:.0f} miles after "
-                f"mile {here.route_mile:.0f} of the route."
-            )
-        else:
-            buy(here, max_range_miles - fuel)
-            fuel = max_range_miles - (route[cheapest_in_range].route_mile - here.route_mile)
-            i = cheapest_in_range
+    end_level = int(np.argmin(arrive))
+    if not np.isfinite(arrive[end_level]):
+        raise NoFeasiblePlanError("No feasible fuel plan for this route.")
+
+    # Walk backwards to recover the purchases.
+    purchases = []
+    level = end_level
+    for (_, station), hop, source in zip(reversed(route), reversed(hops), reversed(bought_from)):
+        level += int(hop)
+        start_level = int(source[level])
+        if start_level >= 0:
+            gallons = (level - start_level) / miles_per_gallon
+            purchases.append(Purchase(station, gallons, gallons * station.price))
+            level = start_level
+    purchases.reverse()
+    return FuelPlan(purchases)
+
+
+def _cheapest_per_mile(
+    stations: list[StationOnRoute], finish: int
+) -> list[tuple[int, StationOnRoute]]:
+    """Round positions to whole miles and keep the cheapest station at each mile."""
+    best: dict[int, StationOnRoute] = {}
+    for station in stations:
+        mile = round(station.route_mile)
+        if mile > finish:
+            continue
+        if mile not in best or station.price < best[mile].price:
+            best[mile] = station
+    return sorted(best.items())

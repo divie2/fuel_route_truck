@@ -155,6 +155,9 @@ FUEL_ROUTE = {
     "MAX_RANGE_MILES": 500,
     "MILES_PER_GALLON": 10,
     "CORRIDOR_MILES": 10,
+    # Extra "cost" per fuel stop used only when choosing stops (not reported).
+    # Prevents many tiny top-ups that save a few cents each.
+    "STOP_PENALTY_USD": 5.0,
     "OSRM_URL": os.environ.get("OSRM_URL", "https://router.project-osrm.org"),
     "NOMINATIM_URL": os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org"),
     "HTTP_TIMEOUT_SECONDS": 20,

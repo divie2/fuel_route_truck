@@ -22,6 +22,7 @@ ASSUMPTIONS = [
     "Only stations within {corridor} miles of the route are considered; detours are not costed.",
     "Stations are placed at their city's centre (the price list has no coordinates).",
     "When a station has several prices in the list, the lowest is used.",
+    "A stop is only added if it saves more than ${stop_penalty:.2f} (avoids tiny top-ups).",
 ]
 
 
@@ -49,7 +50,9 @@ def plan_trip(start_query: str, finish_query: str) -> dict:
     # Empty tank at the start: treat the first station on the route as mile 0.
     on_route[0] = replace(on_route[0], route_mile=0.0)
 
-    plan = plan_fuel_stops(on_route, route.distance_miles, max_range, mpg)
+    plan = plan_fuel_stops(
+        on_route, route.distance_miles, max_range, mpg, stop_penalty=cfg["STOP_PENALTY_USD"]
+    )
 
     details = FuelStation.objects.in_bulk(
         [p.station.key for p in plan.purchases], field_name="opis_id"
@@ -97,7 +100,13 @@ def plan_trip(start_query: str, finish_query: str) -> dict:
             "max_range_miles": max_range,
             "miles_per_gallon": mpg,
             "assumptions": [
-                a.format(max_range=max_range, mpg=mpg, corridor=corridor) for a in ASSUMPTIONS
+                a.format(
+                    max_range=max_range,
+                    mpg=mpg,
+                    corridor=corridor,
+                    stop_penalty=cfg["STOP_PENALTY_USD"],
+                )
+                for a in ASSUMPTIONS
             ],
         },
         "meta": {
