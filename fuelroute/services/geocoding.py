@@ -13,7 +13,7 @@ from django.conf import settings
 from fuelroute.models import City
 
 from .exceptions import InvalidLocationError
-from .places import normalize_city, to_state_code
+from .places import US_STATES, normalize_city, to_state_code
 
 _LATLON_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 _COUNTRY_SUFFIXES = {"usa", "us", "u.s.", "u.s.a.", "united states", "united states of america"}
@@ -61,31 +61,32 @@ def geocode(query: str) -> tuple[Location, int]:
             raise InvalidLocationError(f"Coordinates '{query}' are not within the USA.")
         return Location(query, f"{lat:.5f}, {lon:.5f}", lat, lon, "coordinates"), 0
 
-    city = _lookup_city(query)
-    if city is not None:
-        return Location(query, str(city), city.latitude, city.longitude, "city"), 0
-
-    return _geocode_nominatim(query), 1
-
-
-def _lookup_city(query: str) -> City | None:
     parts = [p.strip() for p in query.split(",") if p.strip()]
     if parts and parts[-1].lower() in _COUNTRY_SUFFIXES:
         parts = parts[:-1]
-    if len(parts) != 2:
-        return None
-    state = to_state_code(parts[1])
-    if state is None:
-        return None
-    return City.objects.filter(search_key=normalize_city(parts[0]), state=state).first()
+
+    if len(parts) == 2:
+        city_name, state_part = parts
+        state = to_state_code(state_part)
+        if state is None:
+            raise InvalidLocationError(
+                f"'{state_part}' is not a US state. Both locations must be within the USA."
+            )
+        city = City.objects.filter(search_key=normalize_city(city_name), state=state).first()
+        if city is not None:
+            return Location(query, str(city), city.latitude, city.longitude, "city"), 0
+        # Structured search so Nominatim can't match a street named after the city.
+        return _geocode_nominatim(query, {"city": city_name, "state": US_STATES[state]}), 1
+
+    return _geocode_nominatim(query, {"q": query}), 1
 
 
-def _geocode_nominatim(query: str) -> Location:
+def _geocode_nominatim(query: str, search: dict) -> Location:
     cfg = settings.FUEL_ROUTE
     try:
         response = requests.get(
             f"{cfg['NOMINATIM_URL']}/search",
-            params={"q": query, "countrycodes": "us", "format": "jsonv2", "limit": 1},
+            params={**search, "countrycodes": "us", "format": "jsonv2", "limit": 1},
             headers={"User-Agent": cfg["USER_AGENT"]},
             timeout=cfg["HTTP_TIMEOUT_SECONDS"],
         )
