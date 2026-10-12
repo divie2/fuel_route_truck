@@ -95,7 +95,7 @@ The `meta` block above is from a repeat request served from the cache. The first
 
 ### `GET /api/route/map/?start=...&finish=...`
 
-An HTML page (Leaflet with CARTO/OpenStreetMap tiles) that shows the route, the start and finish, and every fuel stop with its price, gallons and cost. Each JSON response includes this link as `map_url`. The map reuses the cached route, so opening it makes no extra routing call.
+An HTML page (Leaflet + OpenStreetMap tiles) that shows the route, the start and finish, and every fuel stop with its price, gallons and cost. Each JSON response includes this link as `map_url`. The map reuses the cached route, so opening it makes no extra routing call.
 
 ### Errors
 
@@ -193,6 +193,6 @@ data/                         fuel prices, US cities (+ license)
 ## Credits
 
 - Routing: [OSRM](https://project-osrm.org/) public API, built on © OpenStreetMap contributors.
-- Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, © [CARTO](https://carto.com/attributions), rendered with [Leaflet](https://leafletjs.com/).
+- Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, rendered with [Leaflet](https://leafletjs.com/).
 - City coordinates: [kelvins/US-Cities-Database](https://github.com/kelvins/US-Cities-Database) (MIT, see `data/LICENSE-us_cities.txt`).
 - Fuel prices: provided by Spotter for this assessment.

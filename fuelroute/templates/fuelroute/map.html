@@ -49,11 +49,12 @@
     const data = JSON.parse(document.getElementById("route-data").textContent);
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const map = L.map("map");
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    // OSM tile servers reject requests without a Referer. Django's default
+    // Referrer-Policy (same-origin) strips it, so ask for it explicitly here.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      subdomains: "abcd",
       referrerPolicy: "strict-origin-when-cross-origin",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
 
     const line = L.geoJSON(data.route.geometry, { style: { color: "#2563eb", weight: 5 } }).addTo(map);

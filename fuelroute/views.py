@@ -42,7 +42,7 @@ class RoutePlanView(APIView):
 
 
 def route_map_view(request):
-    """HTML map (Leaflet + CARTO/OpenStreetMap tiles) of the route and fuel stops."""
+    """HTML map (Leaflet + OpenStreetMap tiles) of the route and fuel stops."""
     serializer = RouteRequestSerializer(data=request.GET)
     if not serializer.is_valid():
         return render(
